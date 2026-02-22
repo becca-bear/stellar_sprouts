@@ -45,17 +45,17 @@ playerImageRaw.onload = () => {
   playerImage.src = tempCanvas.toDataURL();
 };
 
-// Load the building image
-const buildingImageRaw = new Image();
-buildingImageRaw.src = './building.png';
-let buildingImage = null;
+// Load the cryo hatchery image
+const hatcheryImageRaw = new Image();
+hatcheryImageRaw.src = './cyro_hatchery.png';
+let hatcheryImage = null;
 
-buildingImageRaw.onload = () => {
+hatcheryImageRaw.onload = () => {
   const tempCanvas = document.createElement('canvas');
   const tempCtx = tempCanvas.getContext('2d');
-  tempCanvas.width = buildingImageRaw.width;
-  tempCanvas.height = buildingImageRaw.height;
-  tempCtx.drawImage(buildingImageRaw, 0, 0);
+  tempCanvas.width = hatcheryImageRaw.width;
+  tempCanvas.height = hatcheryImageRaw.height;
+  tempCtx.drawImage(hatcheryImageRaw, 0, 0);
 
   const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
   const data = imageData.data;
@@ -68,8 +68,35 @@ buildingImageRaw.onload = () => {
   }
 
   tempCtx.putImageData(imageData, 0, 0);
-  buildingImage = new Image();
-  buildingImage.src = tempCanvas.toDataURL();
+  hatcheryImage = new Image();
+  hatcheryImage.src = tempCanvas.toDataURL();
+};
+
+// Load the house image
+const houseImageRaw = new Image();
+houseImageRaw.src = './house.png';
+let houseImage = null;
+
+houseImageRaw.onload = () => {
+  const tempCanvas = document.createElement('canvas');
+  const tempCtx = tempCanvas.getContext('2d');
+  tempCanvas.width = houseImageRaw.width;
+  tempCanvas.height = houseImageRaw.height;
+  tempCtx.drawImage(houseImageRaw, 0, 0);
+
+  const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+  const data = imageData.data;
+
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i], g = data[i + 1], b = data[i + 2];
+    if (r > 240 && g > 240 && b > 240) {
+      data[i + 3] = 0;
+    }
+  }
+
+  tempCtx.putImageData(imageData, 0, 0);
+  houseImage = new Image();
+  houseImage.src = tempCanvas.toDataURL();
 };
 
 // Load the unicorn image
@@ -379,15 +406,28 @@ function addItemToInventory(type, id, name) {
   updateUI();
 }
 
-const building = {
-  x: ROCK_WIDTH - 128 - TILE_SIZE * 2,
-  y: TILE_SIZE * 2,
-  width: 128,
-  height: 128,
+const hatchery = {
+  x: ROCK_WIDTH - 160 - TILE_SIZE * 2,
+  y: TILE_SIZE * 1,
+  width: 160,
+  height: 160,
   collider: {
-    x: ROCK_WIDTH - 128 - TILE_SIZE * 2 + 10,
-    y: TILE_SIZE * 2 + 40,
-    w: 108,
+    x: ROCK_WIDTH - 160 - TILE_SIZE * 2 + 20,
+    y: TILE_SIZE * 1 + 60,
+    w: 120,
+    h: 90
+  }
+};
+
+const house = {
+  x: TILE_SIZE * 2,
+  y: TILE_SIZE * 1,
+  width: 160,
+  height: 160,
+  collider: {
+    x: TILE_SIZE * 2 + 15,
+    y: TILE_SIZE * 1 + 70,
+    w: 130,
     h: 80
   }
 };
@@ -399,10 +439,59 @@ const unicorn = {
   vx: 0,
   vy: 0,
   timer: 0,
-  state: 'idle', // 'idle' or 'walking'
+  state: 'idle', // 'idle', 'walking', or 'petted'
   size: 48,
-  dirX: -1
+  dirX: -1,
+  petTimer: 0, // how long the unicorn stays still after being petted
 };
+
+// Heart particles that float up when unicorn is petted
+const heartParticles = [];
+
+function spawnHeart(x, y) {
+  heartParticles.push({
+    x: x + (Math.random() - 0.5) * 16,
+    y: y - 20,
+    vy: -40 - Math.random() * 20,
+    vx: (Math.random() - 0.5) * 30,
+    life: 1.0, // fades from 1 to 0
+    scale: 0.5 + Math.random() * 0.5,
+    rotation: (Math.random() - 0.5) * 0.3,
+  });
+}
+
+function drawPixelHeart(cx, cy, size, color, alpha) {
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = color;
+  // Pixel heart shape using small rects (8x7 pixel grid scaled up)
+  const s = size / 8; // size of each "pixel" in the heart
+  const pixels = [
+    // Row 0 (top)
+    [1, 0], [2, 0], [5, 0], [6, 0],
+    // Row 1
+    [0, 1], [1, 1], [2, 1], [3, 1], [4, 1], [5, 1], [6, 1], [7, 1],
+    // Row 2
+    [0, 2], [1, 2], [2, 2], [3, 2], [4, 2], [5, 2], [6, 2], [7, 2],
+    // Row 3
+    [1, 3], [2, 3], [3, 3], [4, 3], [5, 3], [6, 3],
+    // Row 4
+    [2, 4], [3, 4], [4, 4], [5, 4],
+    // Row 5
+    [3, 5], [4, 5],
+  ];
+  // Center the heart
+  const offsetX = -4 * s;
+  const offsetY = -3 * s;
+  pixels.forEach(([px, py]) => {
+    ctx.fillRect(cx + offsetX + px * s, cy + offsetY + py * s, s, s);
+  });
+  // Add a highlight pixel for shine effect
+  ctx.fillStyle = 'rgba(255, 255, 255, ' + (alpha * 0.6) + ')';
+  ctx.fillRect(cx + offsetX + 1 * s, cy + offsetY + 1 * s, s, s);
+  ctx.fillRect(cx + offsetX + 5 * s, cy + offsetY + 0 * s, s, s);
+  ctx.restore();
+}
 
 const alienPlants = [
   { x: 80, y: 80, scale: 0.8 },
@@ -507,8 +596,13 @@ function update(dt) {
 
   // Collision with buildings based on current map
   if (currentMap === 'farm') {
-    const bc = building.collider;
-    if (newX > bc.x && newX < bc.x + bc.w && newY > bc.y && newY < bc.y + bc.h) {
+    const hc = hatchery.collider;
+    if (newX > hc.x && newX < hc.x + hc.w && newY > hc.y && newY < hc.y + hc.h) {
+      newX = player.x;
+      newY = player.y;
+    }
+    const hsc = house.collider;
+    if (newX > hsc.x && newX < hsc.x + hsc.w && newY > hsc.y && newY < hsc.y + hsc.h) {
       newX = player.x;
       newY = player.y;
     }
@@ -555,39 +649,63 @@ function update(dt) {
 
   // Unicorn Wandering Logic (Only on farm)
   if (currentMap === 'farm') {
-    unicorn.timer -= dt;
-    if (unicorn.timer <= 0) {
-      if (unicorn.state === 'idle') {
-        unicorn.state = 'walking';
-        const angle = Math.random() * Math.PI * 2;
-        unicorn.vx = Math.cos(angle) * unicorn.speed;
-        unicorn.vy = Math.sin(angle) * unicorn.speed;
-        unicorn.timer = 1 + Math.random() * 3;
-        if (unicorn.vx !== 0) unicorn.dirX = unicorn.vx > 0 ? 1 : -1;
-      } else {
+    // Handle petted state — unicorn stays still for a bit
+    if (unicorn.state === 'petted') {
+      unicorn.petTimer -= dt;
+      unicorn.vx = 0;
+      unicorn.vy = 0;
+      if (unicorn.petTimer <= 0) {
         unicorn.state = 'idle';
-        unicorn.vx = 0;
-        unicorn.vy = 0;
-        unicorn.timer = 2 + Math.random() * 2;
+        unicorn.timer = 1 + Math.random() * 2;
+      }
+    } else {
+      unicorn.timer -= dt;
+      if (unicorn.timer <= 0) {
+        if (unicorn.state === 'idle') {
+          unicorn.state = 'walking';
+          const angle = Math.random() * Math.PI * 2;
+          unicorn.vx = Math.cos(angle) * unicorn.speed;
+          unicorn.vy = Math.sin(angle) * unicorn.speed;
+          unicorn.timer = 1 + Math.random() * 3;
+          if (unicorn.vx !== 0) unicorn.dirX = unicorn.vx > 0 ? 1 : -1;
+        } else {
+          unicorn.state = 'idle';
+          unicorn.vx = 0;
+          unicorn.vy = 0;
+          unicorn.timer = 2 + Math.random() * 2;
+        }
+      }
+
+      if (unicorn.state === 'walking') {
+        let nextUnicornX = unicorn.x + unicorn.vx * dt;
+        let nextUnicornY = unicorn.y + unicorn.vy * dt;
+
+        // Bounds check for unicorn
+        const uPadding = unicorn.size / 2;
+        if (nextUnicornX < uPadding || nextUnicornX > ROCK_WIDTH - uPadding ||
+          nextUnicornY < uPadding || nextUnicornY > ROCK_HEIGHT - uPadding) {
+          unicorn.state = 'idle';
+          unicorn.vx = 0;
+          unicorn.vy = 0;
+          unicorn.timer = 1;
+        } else {
+          unicorn.x = nextUnicornX;
+          unicorn.y = nextUnicornY;
+        }
       }
     }
+  }
 
-    if (unicorn.state === 'walking') {
-      let nextUnicornX = unicorn.x + unicorn.vx * dt;
-      let nextUnicornY = unicorn.y + unicorn.vy * dt;
-
-      // Bounds check for unicorn
-      const uPadding = unicorn.size / 2;
-      if (nextUnicornX < uPadding || nextUnicornX > ROCK_WIDTH - uPadding ||
-        nextUnicornY < uPadding || nextUnicornY > ROCK_HEIGHT - uPadding) {
-        unicorn.state = 'idle';
-        unicorn.vx = 0;
-        unicorn.vy = 0;
-        unicorn.timer = 1;
-      } else {
-        unicorn.x = nextUnicornX;
-        unicorn.y = nextUnicornY;
-      }
+  // Update heart particles
+  for (let i = heartParticles.length - 1; i >= 0; i--) {
+    const h = heartParticles[i];
+    h.y += h.vy * dt;
+    h.x += h.vx * dt;
+    h.vy *= 0.98; // slow down gently
+    h.vx *= 0.96;
+    h.life -= dt * 0.8; // fade over ~1.25 seconds
+    if (h.life <= 0) {
+      heartParticles.splice(i, 1);
     }
   }
 }
@@ -734,9 +852,14 @@ function render() {
   }
 
   if (currentMap === 'farm') {
-    // Draw Building
-    if (buildingImage && buildingImage.complete) {
-      ctx.drawImage(buildingImage, building.x, building.y, building.width, building.height);
+    // Draw Cryo Hatchery
+    if (hatcheryImage && hatcheryImage.complete) {
+      ctx.drawImage(hatcheryImage, hatchery.x, hatchery.y, hatchery.width, hatchery.height);
+    }
+
+    // Draw House
+    if (houseImage && houseImage.complete) {
+      ctx.drawImage(houseImage, house.x, house.y, house.width, house.height);
     }
 
     // Draw Alien Plants
@@ -794,13 +917,23 @@ function render() {
       ctx.save();
       ctx.translate(unicorn.x, unicorn.y);
       if (unicorn.dirX > 0) ctx.scale(-1, 1);
-      const uniBob = Math.sin(Date.now() / 400) * 4;
+      const uniBob = unicorn.state === 'petted'
+        ? Math.sin(Date.now() / 200) * 2  // gentle happy wiggle when petted
+        : Math.sin(Date.now() / 400) * 4;
       const uSize = unicorn.size;
       ctx.fillStyle = 'rgba(0,0,0,0.3)';
       ctx.beginPath(); ctx.ellipse(0, 10, 12, 4, 0, 0, Math.PI * 2); ctx.fill();
       ctx.drawImage(unicornImage, -uSize / 2, -uSize / 2 + uniBob, uSize, uSize);
       ctx.restore();
     }
+
+    // Draw heart particles above unicorn
+    heartParticles.forEach(h => {
+      const heartSize = 14 * h.scale;
+      // Hearts use a warm pink/red color
+      const heartColor = `rgb(${220 + Math.floor(35 * h.scale)}, ${40 + Math.floor(40 * h.scale)}, ${80 + Math.floor(40 * h.scale)})`;
+      drawPixelHeart(h.x, h.y, heartSize, heartColor, Math.max(0, h.life));
+    });
 
     // Highlight tile the player is targeting (only on farm)
     const reach = TILE_SIZE * 0.75;
@@ -933,10 +1066,9 @@ function drawPolygon(cx, cy, sides, radius) {
   ctx.fill();
 }
 
-// Click to open shop — converts screen coords back to map coords
+// Click handler — converts screen coords back to map coords
 canvas.addEventListener('click', (e) => {
   if (shopOpen) return;
-  if (currentMap !== 'town') return;
 
   const rect = canvas.getBoundingClientRect();
   const scaleX = canvas.width / rect.width;
@@ -944,18 +1076,43 @@ canvas.addEventListener('click', (e) => {
   const screenX = (e.clientX - rect.left) * scaleX;
   const screenY = (e.clientY - rect.top) * scaleY;
 
-  // Convert screen → map coords (account for center offset)
+  // Convert screen → map coords (account for center offset + platform bob)
   const offsetX = (cw - ROCK_WIDTH) / 2;
   const offsetY = (ch - ROCK_HEIGHT) / 2;
+  const platformBob = Math.sin(Date.now() / 1500) * 12;
   const mapX = screenX - offsetX;
-  const mapY = screenY - offsetY;
+  const mapY = screenY - offsetY - platformBob;
 
-  // Check if click is within the shop hitbox
-  if (mapX >= shop.x - 20 && mapX <= shop.x + shop.width + 20 &&
-    mapY >= shop.y - 20 && mapY <= shop.y + shop.height + 20) {
-    const distToShop = Math.hypot(player.x - (shop.x + shop.width / 2), player.y - (shop.y + shop.height / 2));
-    if (distToShop < 240) {
-      openShop();
+  // --- Unicorn Interaction (farm only) ---
+  if (currentMap === 'farm') {
+    const distToUnicorn = Math.hypot(mapX - unicorn.x, mapY - unicorn.y);
+    const playerDistToUnicorn = Math.hypot(player.x - unicorn.x, player.y - unicorn.y);
+
+    if (distToUnicorn < unicorn.size && playerDistToUnicorn < 80) {
+      // Pet the unicorn! 💖
+      unicorn.state = 'petted';
+      unicorn.petTimer = 2.5; // stay still for 2.5 seconds
+      unicorn.vx = 0;
+      unicorn.vy = 0;
+      // Face the unicorn toward the player
+      unicorn.dirX = player.x < unicorn.x ? -1 : 1;
+
+      // Spawn 3 hearts in a burst
+      for (let i = 0; i < 3; i++) {
+        setTimeout(() => spawnHeart(unicorn.x, unicorn.y - unicorn.size / 2), i * 150);
+      }
+      return; // don't process further clicks
+    }
+  }
+
+  // --- Shop Interaction (town only) ---
+  if (currentMap === 'town') {
+    if (mapX >= shop.x - 20 && mapX <= shop.x + shop.width + 20 &&
+      mapY >= shop.y - 20 && mapY <= shop.y + shop.height + 20) {
+      const distToShop = Math.hypot(player.x - (shop.x + shop.width / 2), player.y - (shop.y + shop.height / 2));
+      if (distToShop < 240) {
+        openShop();
+      }
     }
   }
 });
