@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stellar Sprouts</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+
+<body>
+  <div id="ui-layer">
+    <h1>Stellar Sprouts</h1>
+    <p>WASD to move | SPACE to farm | 1-9 to swap slots</p>
+  </div>
+
+  <div id="hotbar-container">
+    <div id="hotbar">
+      <!-- Slots populated by JS -->
+    </div>
+  </div>
+
+  <!-- Shop Overlay -->
+  <div id="shop-overlay" class="hidden">
+    <div id="shop-panel">
+      <!-- Shopkeeper -->
+      <div id="shopkeeper-section">
+        <img id="shopkeeper-img" src="./shopkeeper.png" alt="Shopkeeper" />
+        <div id="shopkeeper-speech">
+          <p id="shopkeeper-msg">✨ Welcome, Stellar Farmer! What'll it be today?</p>
+        </div>
+      </div>
+
+      <!-- Shop Content -->
+      <div id="shop-content">
+        <div id="shop-header">
+          <h2>🛸 Space Market</h2>
+          <button id="shop-close-btn" onclick="closeShop()">✕</button>
+        </div>
+
+        <!-- Tabs -->
+        <div id="shop-tabs">
+          <button class="tab-btn active" id="tab-buy" onclick="switchTab('buy')">🌱 Buy Seeds</button>
+          <button class="tab-btn" id="tab-sell" onclick="switchTab('sell')">💰 Sell Crops</button>
+        </div>
+
+        <!-- Buy Tab -->
+        <div id="tab-buy-content" class="tab-content">
+          <div class="shop-items" id="buy-items"></div>
+        </div>
+
+        <!-- Sell Tab -->
+        <div id="tab-sell-content" class="tab-content hidden">
+          <div class="shop-items" id="sell-items"></div>
+          <div id="sell-total-row">
+            <span id="sell-total-label">Total earnings:</span>
+            <span id="sell-total">🌙 0 Stardust</span>
+          </div>
+        </div>
+
+        <!-- Player gold -->
+        <div id="shop-footer">
+          <span>💰 Your Stardust:</span>
+          <span id="player-gold">0</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <canvas id="gameCanvas"></canvas>
+  <script type="module" src="./main.js"></script>
+</body>
+
+</html>
