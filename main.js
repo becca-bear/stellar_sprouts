@@ -154,9 +154,9 @@ plantImageRaw.onload = () => {
   plantImage.src = tempCanvas.toDataURL();
 };
 
-// Load the shop image
+// Load the shop/outpost image
 const shopImageRaw = new Image();
-shopImageRaw.src = './shop.png';
+shopImageRaw.src = './orions_outpost.png';
 let shopImage = null;
 
 shopImageRaw.onload = () => {
@@ -181,6 +181,13 @@ shopImageRaw.onload = () => {
   processed.onload = () => { shopImage = processed; };
   processed.src = tempCanvas.toDataURL();
 };
+
+// Load seed packet images
+const seedPacketImages = [new Image(), new Image(), new Image(), new Image()];
+seedPacketImages[0].src = './star-parsnip_seeds.png';
+seedPacketImages[1].src = './Glass_pods_seeds.png';
+seedPacketImages[2].src = './cratertatos_seeds.png';
+seedPacketImages[3].src = './nova_berries_seeds.png';
 
 // Constants
 const TILE_SIZE = 32; // Made smaller for a more cozy, "miniature" feel
@@ -215,9 +222,10 @@ window.addEventListener('keyup', (e) => {
 
 // Seed Configuration
 const SEED_TYPES = [
-  { name: 'Moon Seed', color: '#58a6ff', bloomColor: '#f0883e', growthRate: 0.1, cropName: 'Moon Melon' },
-  { name: 'Nebula Seed', color: '#d946ef', bloomColor: '#ff00ff', growthRate: 0.08, cropName: 'Nebula Bloom' },
-  { name: 'Void Seed', color: '#c084fc', bloomColor: '#7c3aed', growthRate: 0.15, cropName: 'Void Root' }
+  { name: 'Star-Parsnip Seeds', color: '#f5d76e', bloomColor: '#fffbe6', growthRate: 0.1, cropName: 'Star-Parsnip' },
+  { name: 'Glass-Pods Seeds', color: '#7ec8a8', bloomColor: '#b8f0d8', growthRate: 0.08, cropName: 'Glass-Pods' },
+  { name: 'Cratertatoes Seeds', color: '#8a8a8a', bloomColor: '#b0b0b0', growthRate: 0.15, cropName: 'Cratertatoes' },
+  { name: 'Nova-Berries Seeds', color: '#4a6fa5', bloomColor: '#6e9eef', growthRate: 0.06, cropName: 'Nova-Berries' }
 ];
 
 let selectedSlotIndex = 0;
@@ -244,10 +252,10 @@ const player = {
 
 const inventory = {
   slots: [
-    { type: 'seed', id: 0, count: 10 },
+    { type: 'seed', id: 0, count: 5 },
     { type: 'seed', id: 1, count: 5 },
     { type: 'seed', id: 2, count: 5 },
-    { type: 'empty' },
+    { type: 'seed', id: 3, count: 5 },
     { type: 'empty' },
     { type: 'empty' },
     { type: 'empty' },
@@ -261,18 +269,20 @@ let playerGold = 100;
 
 // Shop catalogue
 const SHOP_SEEDS = [
-  { id: 0, name: 'Moon Seed', desc: 'Grows into a Moon Melon. Classic and reliable.', price: 10, color: '#58a6ff', growthRate: 0.1 },
-  { id: 1, name: 'Nebula Seed', desc: 'Blooms into a star-shaped Nebula Bloom. Slow, but magnificent.', price: 15, color: '#d946ef', growthRate: 0.08 },
-  { id: 2, name: 'Void Seed', desc: 'Produces fast-growing Void Roots. Mysterious.', price: 12, color: '#c084fc', growthRate: 0.15 },
+  { id: 0, name: 'Star-Parsnip Seeds', desc: 'A glowing white root. Classic and reliable.', price: 10, color: '#f5d76e' },
+  { id: 1, name: 'Glass-Pods Seeds', desc: 'Transparent beans with visible liquid sap inside.', price: 15, color: '#7ec8a8' },
+  { id: 2, name: 'Cratertatoes Seeds', desc: 'Lumpy tubers that look like tiny moon rocks. Fast grower!', price: 12, color: '#8a8a8a' },
+  { id: 3, name: 'Nova-Berries Seeds', desc: 'Rare blue berries that pulse with starlight. Worth the wait!', price: 20, color: '#4a6fa5' },
 ];
 
-const CROP_SELL_PRICES = [25, 35, 30]; // Sell price per crop type (index = seed id)
+const CROP_SELL_PRICES = [25, 35, 30, 45]; // Sell price per crop type (index = seed id)
 
 const SHOPKEEPER_MESSAGES = [
-  '✨ Welcome, Stellar Farmer! What\'ll it be today?',
-  '🌙 Fresh moon seeds just arrived!',
-  '💫 The Nebula seeds are especially potent this cycle!',
-  '🛸 First time? Everything\'s grown under the stars!',
+  '✨ Welcome to Orion\'s Outpost! What\'ll it be today?',
+  '🥕 Star-Parsnips are glowing bright this season!',
+  '🫘 Glass-Pods — you can see the sap right through \'em!',
+  '🪨 Cratertatoes grow fast — great for beginners!',
+  '🫐 Nova-Berries take patience, but they\'re worth every Stardust!',
 ];
 
 let shopOpen = false;
@@ -313,8 +323,12 @@ function renderShopBuyTab() {
     const canAfford = playerGold >= seed.price;
     const div = document.createElement('div');
     div.className = 'shop-item';
+    const imgSrc = seedPacketImages[seed.id] && seedPacketImages[seed.id].complete ? seedPacketImages[seed.id].src : '';
+    const imgHtml = imgSrc
+      ? `<img src="${imgSrc}" style="width:48px;height:auto;border-radius:6px;image-rendering:pixelated;" />`
+      : `<div class="item-gem" style="background:${seed.color}; box-shadow:0 0 14px ${seed.color}"></div>`;
     div.innerHTML = `
-      <div class="item-gem" style="background:${seed.color}; box-shadow:0 0 14px ${seed.color}"></div>
+      ${imgHtml}
       <div class="shop-item-info">
         <p class="item-name">${seed.name}</p>
         <p class="item-desc">${seed.desc}</p>
@@ -769,8 +783,13 @@ function updateUI() {
       icon.className = 'item-icon';
 
       if (slot.type === 'seed') {
-        const seedInfo = SEED_TYPES[slot.id];
-        icon.innerHTML = `<div class="icon-seed" style="background: ${seedInfo.color}; box-shadow: 0 0 10px ${seedInfo.color}"></div>`;
+        const seedImg = seedPacketImages[slot.id];
+        if (seedImg && seedImg.complete) {
+          icon.innerHTML = `<img src="${seedImg.src}" style="width:32px;height:auto;image-rendering:pixelated;" />`;
+        } else {
+          const seedInfo = SEED_TYPES[slot.id];
+          icon.innerHTML = `<div class="icon-seed" style="background: ${seedInfo.color}; box-shadow: 0 0 10px ${seedInfo.color}"></div>`;
+        }
       } else if (slot.type === 'crop') {
         const seedInfo = SEED_TYPES[slot.id];
         icon.innerHTML = `<div class="icon-crop" style="background: ${seedInfo.bloomColor}; box-shadow: 0 0 10px ${seedInfo.bloomColor}"></div>`;
@@ -893,18 +912,91 @@ function render() {
             // Render Crop
             const s = TILE_SIZE / 2 * plot.growth;
             const type = SEED_TYPES[plot.seedIndex];
-            ctx.fillStyle = plot.state === 'ready' ? type.bloomColor : type.color;
-            ctx.shadowBlur = plot.state === 'ready' ? 15 : 0;
-            ctx.shadowColor = type.bloomColor;
+            const cx = tx + TILE_SIZE / 2;
+            const cy = ty + TILE_SIZE / 2;
+            const isReady = plot.state === 'ready';
 
-            if (plot.seedIndex === 1) { // Nebula Bloom - Star shape
-              drawStar(tx + TILE_SIZE / 2, ty + TILE_SIZE / 2, 5, Math.max(4, s), Math.max(2, s / 2));
-            } else if (plot.seedIndex === 2) { // Void Root - Hexagon
-              drawPolygon(tx + TILE_SIZE / 2, ty + TILE_SIZE / 2, 6, Math.max(4, s));
-            } else { // Moon Seed - Circle
+            if (plot.seedIndex === 0) {
+              // Star-Parsnip: Glowing white/yellow root
+              ctx.fillStyle = isReady ? '#fffbe6' : '#f5d76e';
+              ctx.shadowBlur = isReady ? 12 : 0;
+              ctx.shadowColor = '#fffbe6';
+              // Root body (tapered)
+              const rootW = Math.max(3, s * 0.6);
+              const rootH = Math.max(4, s * 1.4);
               ctx.beginPath();
-              ctx.arc(tx + TILE_SIZE / 2, ty + TILE_SIZE / 2, Math.max(4, s), 0, Math.PI * 2);
+              ctx.moveTo(cx - rootW, cy - rootH * 0.3);
+              ctx.lineTo(cx + rootW, cy - rootH * 0.3);
+              ctx.lineTo(cx + rootW * 0.3, cy + rootH * 0.7);
+              ctx.lineTo(cx - rootW * 0.3, cy + rootH * 0.7);
+              ctx.closePath();
               ctx.fill();
+              // Leaves on top
+              if (plot.growth > 0.3) {
+                ctx.fillStyle = '#4caf50';
+                ctx.beginPath();
+                ctx.ellipse(cx - 3, cy - rootH * 0.3 - 2, 3, 5, -0.3, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.ellipse(cx + 3, cy - rootH * 0.3 - 2, 3, 5, 0.3, 0, Math.PI * 2);
+                ctx.fill();
+              }
+            } else if (plot.seedIndex === 1) {
+              // Glass-Pods: Transparent beans with sap inside
+              ctx.shadowBlur = isReady ? 10 : 0;
+              ctx.shadowColor = '#b8f0d8';
+              const podW = Math.max(3, s * 0.5);
+              const podH = Math.max(4, s * 1.2);
+              // Pod shell (semi-transparent green)
+              ctx.fillStyle = isReady ? 'rgba(126, 200, 168, 0.7)' : 'rgba(126, 200, 168, 0.4)';
+              ctx.beginPath();
+              ctx.ellipse(cx - 3, cy, podW, podH, -0.2, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.beginPath();
+              ctx.ellipse(cx + 3, cy, podW, podH, 0.2, 0, Math.PI * 2);
+              ctx.fill();
+              // Inner sap dots
+              if (plot.growth > 0.4) {
+                ctx.fillStyle = 'rgba(200, 255, 230, 0.8)';
+                ctx.beginPath(); ctx.arc(cx - 3, cy - 2, 2, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(cx + 3, cy + 1, 2, 0, Math.PI * 2); ctx.fill();
+              }
+            } else if (plot.seedIndex === 2) {
+              // Cratertatoes: Lumpy gray moon-rock tubers
+              ctx.fillStyle = isReady ? '#b0b0b0' : '#8a8a8a';
+              ctx.shadowBlur = isReady ? 6 : 0;
+              ctx.shadowColor = '#d0d0d0';
+              const r1 = Math.max(3, s * 0.6);
+              const r2 = Math.max(2, s * 0.4);
+              // Main lump
+              ctx.beginPath(); ctx.arc(cx, cy, r1, 0, Math.PI * 2); ctx.fill();
+              // Smaller lumps around it
+              if (plot.growth > 0.3) {
+                ctx.beginPath(); ctx.arc(cx - r1 * 0.7, cy + r1 * 0.5, r2, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(cx + r1 * 0.6, cy - r1 * 0.3, r2 * 0.8, 0, Math.PI * 2); ctx.fill();
+              }
+              // Crater dimples
+              if (isReady) {
+                ctx.fillStyle = 'rgba(60, 60, 60, 0.3)';
+                ctx.beginPath(); ctx.arc(cx - 2, cy - 1, 2, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(cx + 3, cy + 2, 1.5, 0, Math.PI * 2); ctx.fill();
+              }
+            } else if (plot.seedIndex === 3) {
+              // Nova-Berries: Blue berries that pulse light
+              const pulse = Math.sin(Date.now() / 500) * 0.3 + 0.7;
+              ctx.fillStyle = isReady ? `rgba(110, 158, 239, ${pulse})` : '#4a6fa5';
+              ctx.shadowBlur = isReady ? 15 * pulse : 0;
+              ctx.shadowColor = '#6e9eef';
+              const berryR = Math.max(2, s * 0.35);
+              // Cluster of berries
+              ctx.beginPath(); ctx.arc(cx, cy - berryR * 0.5, berryR, 0, Math.PI * 2); ctx.fill();
+              ctx.beginPath(); ctx.arc(cx - berryR, cy + berryR * 0.5, berryR, 0, Math.PI * 2); ctx.fill();
+              ctx.beginPath(); ctx.arc(cx + berryR, cy + berryR * 0.5, berryR, 0, Math.PI * 2); ctx.fill();
+              // Highlight shimmer
+              if (isReady) {
+                ctx.fillStyle = `rgba(255, 255, 255, ${pulse * 0.4})`;
+                ctx.beginPath(); ctx.arc(cx - 1, cy - berryR * 0.5 - 1, 1.5, 0, Math.PI * 2); ctx.fill();
+              }
             }
             ctx.shadowBlur = 0; // reset
           }
@@ -965,7 +1057,7 @@ function render() {
       ctx.fillRect(shop.x, shop.y, shop.width, shop.height);
       ctx.fillStyle = 'white';
       ctx.font = '14px Inter';
-      ctx.fillText('Space Market', shop.x + 30, shop.y + shop.height / 2);
+      ctx.fillText('Orion\'s Outpost', shop.x + 30, shop.y + shop.height / 2);
     }
 
     // Welcome to Town Text
