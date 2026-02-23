@@ -197,7 +197,7 @@ laserHoeImage.src = './laser_hoe.png';
 laserHoeImage.onload = () => { if (typeof updateUI === 'function') updateUI(); };
 
 const playerActionsSheet = new Image();
-playerActionsSheet.src = './laser_hoe_spritesheet.png';
+playerActionsSheet.src = './laser_hoe_spritesheet2.png';
 
 // Constants
 const TILE_SIZE = 32; // Made smaller for a more cozy, "miniature" feel
