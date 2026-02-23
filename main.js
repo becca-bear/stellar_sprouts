@@ -15,8 +15,9 @@ baseImage.src = './base.png';
 
 // Load the player image
 const playerImageRaw = new Image();
-playerImageRaw.src = './player.png';
+playerImageRaw.src = './character1.png';
 let playerImage = null; // Will hold the 'cleaned' version
+
 
 playerImageRaw.onload = () => {
   // Create a temporary canvas to strip the white background
