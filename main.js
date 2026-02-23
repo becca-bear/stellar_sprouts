@@ -224,10 +224,10 @@ window.addEventListener('keyup', (e) => {
 
 // Seed Configuration
 const SEED_TYPES = [
-  { name: 'Star-Parsnip Seeds', color: '#f5d76e', bloomColor: '#fffbe6', growthRate: 0.1, cropName: 'Star-Parsnip' },
-  { name: 'Glass-Pods Seeds', color: '#7ec8a8', bloomColor: '#b8f0d8', growthRate: 0.08, cropName: 'Glass-Pods' },
-  { name: 'Cratertatoes Seeds', color: '#8a8a8a', bloomColor: '#b0b0b0', growthRate: 0.15, cropName: 'Cratertatoes' },
-  { name: 'Nova-Berries Seeds', color: '#4a6fa5', bloomColor: '#6e9eef', growthRate: 0.06, cropName: 'Nova-Berries' }
+  { name: 'Star-Parsnip Seeds', color: '#f5d76e', bloomColor: '#fffbe6', cropName: 'Star-Parsnip', totalGrowthDays: 4, compatibleSeasons: [0, 1] },
+  { name: 'Glass-Pods Seeds', color: '#7ec8a8', bloomColor: '#b8f0d8', cropName: 'Glass-Pods', totalGrowthDays: 6, compatibleSeasons: [0, 2] },
+  { name: 'Cratertatoes Seeds', color: '#8a8a8a', bloomColor: '#b0b0b0', cropName: 'Cratertatoes', totalGrowthDays: 3, compatibleSeasons: [0, 1, 2, 3] },
+  { name: 'Nova-Berries Seeds', color: '#4a6fa5', bloomColor: '#6e9eef', cropName: 'Nova-Berries', totalGrowthDays: 8, compatibleSeasons: [2, 3] }
 ];
 
 let selectedSlotIndex = 0;
@@ -291,7 +291,46 @@ function advanceDay() {
   currentHour = START_HOUR;
   currentMinute = 0;
   syncGlobals();
+  onNewDay(); // Process crop growth at dawn
   updateCalendarUI();
+}
+
+// Called every morning — processes crop growth, watering, and season checks
+function onNewDay() {
+  for (const key in farmData) {
+    const plot = farmData[key];
+    if (!plot || plot.state === 'hoed' || plot.state === 'ready') continue;
+
+    if (plot.state === 'withered') continue; // Withered crops stay dead
+
+    if (plot.state === 'planted') {
+      const seedType = SEED_TYPES[plot.seedIndex];
+
+      // Season check — wither if wrong season
+      if (!seedType.compatibleSeasons.includes(currentSeason)) {
+        plot.state = 'withered';
+        plot.withered = true;
+        continue;
+      }
+
+      // Growth check — only grow if watered
+      if (plot.isWatered) {
+        plot.growthDays++;
+        // Recalculate growth stage (0-4)
+        const progress = plot.growthDays / seedType.totalGrowthDays;
+        plot.currentGrowthStage = Math.min(4, Math.floor(progress * 5));
+
+        // Ready to harvest at stage 4
+        if (plot.growthDays >= seedType.totalGrowthDays) {
+          plot.state = 'ready';
+          plot.currentGrowthStage = 4;
+        }
+      }
+
+      // Reset watering for the new day
+      plot.isWatered = false;
+    }
+  }
 }
 
 function updateGameTime(dt) {
@@ -764,18 +803,7 @@ function update(dt) {
     spaceJustPressed = false;
   }
 
-  // Grow crops
-  for (const key in farmData) {
-    const plot = farmData[key];
-    if (plot.state === 'planted' && plot.growth < 1) {
-      const type = SEED_TYPES[plot.seedIndex];
-      plot.growth += dt * (type ? type.growthRate : 0.1);
-      if (plot.growth >= 1) {
-        plot.growth = 1;
-        plot.state = 'ready';
-      }
-    }
-  }
+  // (Crop growth is now day-based — see onNewDay())
 
   // Unicorn Wandering Logic (Only on farm)
   if (currentMap === 'farm') {
@@ -855,9 +883,10 @@ function interact() {
 
     if (!plot) {
       if (currentMap === 'farm') {
-        farmData[key] = { state: 'hoed', growth: 0 };
+        farmData[key] = { state: 'hoed' };
       }
     } else if (plot.state === 'hoed' && selectedSlot.type === 'seed' && selectedSlot.count > 0) {
+      // Plant a seed
       const seedId = selectedSlot.id;
       selectedSlot.count--;
       if (selectedSlot.count <= 0) {
@@ -865,16 +894,26 @@ function interact() {
       }
       farmData[key] = {
         state: 'planted',
-        growth: 0,
-        seedIndex: seedId
+        seedIndex: seedId,
+        growthDays: 0,
+        currentGrowthStage: 0,
+        isWatered: false,
+        withered: false
       };
       updateUI();
+    } else if (plot.state === 'planted' && !plot.isWatered) {
+      // Water a planted crop
+      plot.isWatered = true;
     } else if (plot.state === 'ready') {
+      // Harvest
       const cropId = plot.seedIndex;
       const seedInfo = SEED_TYPES[cropId];
       addItemToInventory('crop', cropId, seedInfo.cropName);
       delete farmData[key];
       updateUI();
+    } else if (plot.state === 'withered') {
+      // Clear withered crop
+      delete farmData[key];
     }
   }
 }
@@ -1017,102 +1056,137 @@ function render() {
         const plot = farmData[`${r},${c}`];
 
         if (plot) {
+          const cx = tx + TILE_SIZE / 2;
+          const cy = ty + TILE_SIZE / 2;
+
           if (plot.state === 'hoed') {
-            // Semi-transparent tilled ground
-            ctx.fillStyle = 'rgba(101, 75, 56, 0.85)';
-            ctx.fillRect(tx + 4, ty + 4, TILE_SIZE - 8, TILE_SIZE - 8);
-          } else if (plot.state === 'planted' || plot.state === 'ready') {
             ctx.fillStyle = 'rgba(101, 75, 56, 0.85)';
             ctx.fillRect(tx + 4, ty + 4, TILE_SIZE - 8, TILE_SIZE - 8);
 
-            // Render Crop
-            const s = TILE_SIZE / 2 * plot.growth;
+          } else if (plot.state === 'withered') {
+            // Withered crop — dark brown soil + gray dead plant
+            ctx.fillStyle = 'rgba(80, 55, 35, 0.9)';
+            ctx.fillRect(tx + 4, ty + 4, TILE_SIZE - 8, TILE_SIZE - 8);
+            ctx.fillStyle = '#6b5b4a';
+            ctx.beginPath(); ctx.arc(cx, cy + 2, 4, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = '#5a4a3a';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.moveTo(cx, cy + 2); ctx.lineTo(cx - 2, cy - 5); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(cx, cy + 2); ctx.lineTo(cx + 3, cy - 4); ctx.stroke();
+            // Withered X indicator
+            ctx.strokeStyle = 'rgba(255, 80, 80, 0.5)';
+            ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(tx + 6, ty + 6); ctx.lineTo(tx + TILE_SIZE - 6, ty + TILE_SIZE - 6); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(tx + TILE_SIZE - 6, ty + 6); ctx.lineTo(tx + 6, ty + TILE_SIZE - 6); ctx.stroke();
+
+          } else if (plot.state === 'planted' || plot.state === 'ready') {
+            // Soil — darker if watered
+            ctx.fillStyle = plot.isWatered ? 'rgba(60, 45, 30, 0.95)' : 'rgba(101, 75, 56, 0.85)';
+            ctx.fillRect(tx + 4, ty + 4, TILE_SIZE - 8, TILE_SIZE - 8);
+
+            // Watered sparkle indicator
+            if (plot.isWatered) {
+              ctx.fillStyle = 'rgba(100, 180, 255, 0.4)';
+              ctx.beginPath(); ctx.arc(tx + 8, ty + 8, 2, 0, Math.PI * 2); ctx.fill();
+              ctx.beginPath(); ctx.arc(tx + TILE_SIZE - 8, ty + TILE_SIZE - 10, 1.5, 0, Math.PI * 2); ctx.fill();
+            }
+
+            // Stage-based crop rendering
+            const stage = plot.currentGrowthStage || 0;
             const type = SEED_TYPES[plot.seedIndex];
-            const cx = tx + TILE_SIZE / 2;
-            const cy = ty + TILE_SIZE / 2;
             const isReady = plot.state === 'ready';
 
-            if (plot.seedIndex === 0) {
-              // Star-Parsnip: Glowing white/yellow root
-              ctx.fillStyle = isReady ? '#fffbe6' : '#f5d76e';
-              ctx.shadowBlur = isReady ? 12 : 0;
-              ctx.shadowColor = '#fffbe6';
-              // Root body (tapered)
-              const rootW = Math.max(3, s * 0.6);
-              const rootH = Math.max(4, s * 1.4);
-              ctx.beginPath();
-              ctx.moveTo(cx - rootW, cy - rootH * 0.3);
-              ctx.lineTo(cx + rootW, cy - rootH * 0.3);
-              ctx.lineTo(cx + rootW * 0.3, cy + rootH * 0.7);
-              ctx.lineTo(cx - rootW * 0.3, cy + rootH * 0.7);
-              ctx.closePath();
-              ctx.fill();
-              // Leaves on top
-              if (plot.growth > 0.3) {
+            if (stage === 0) {
+              // Stage 0: Seed — tiny dot
+              ctx.fillStyle = type.color;
+              ctx.beginPath(); ctx.arc(cx, cy + 3, 2, 0, Math.PI * 2); ctx.fill();
+
+            } else if (stage === 1) {
+              // Stage 1: Sprout — small stem + tiny leaf
+              ctx.strokeStyle = '#4caf50';
+              ctx.lineWidth = 1.5;
+              ctx.beginPath(); ctx.moveTo(cx, cy + 6); ctx.lineTo(cx, cy); ctx.stroke();
+              ctx.fillStyle = '#66bb6a';
+              ctx.beginPath(); ctx.ellipse(cx + 2, cy, 2, 3, 0.3, 0, Math.PI * 2); ctx.fill();
+
+            } else if (stage === 2) {
+              // Stage 2: Growing — taller stem + two leaves
+              ctx.strokeStyle = '#43a047';
+              ctx.lineWidth = 2;
+              ctx.beginPath(); ctx.moveTo(cx, cy + 6); ctx.lineTo(cx, cy - 4); ctx.stroke();
+              ctx.fillStyle = '#66bb6a';
+              ctx.beginPath(); ctx.ellipse(cx - 3, cy - 2, 3, 4, -0.3, 0, Math.PI * 2); ctx.fill();
+              ctx.beginPath(); ctx.ellipse(cx + 3, cy - 1, 3, 4, 0.3, 0, Math.PI * 2); ctx.fill();
+              // Color hint of crop type
+              ctx.fillStyle = type.color + '60';
+              ctx.beginPath(); ctx.arc(cx, cy - 5, 2, 0, Math.PI * 2); ctx.fill();
+
+            } else if (stage === 3) {
+              // Stage 3: Near-mature — full plant with crop color
+              ctx.strokeStyle = '#388e3c';
+              ctx.lineWidth = 2.5;
+              ctx.beginPath(); ctx.moveTo(cx, cy + 6); ctx.lineTo(cx, cy - 6); ctx.stroke();
+              ctx.fillStyle = '#4caf50';
+              ctx.beginPath(); ctx.ellipse(cx - 4, cy - 3, 3, 5, -0.3, 0, Math.PI * 2); ctx.fill();
+              ctx.beginPath(); ctx.ellipse(cx + 4, cy - 2, 3, 5, 0.3, 0, Math.PI * 2); ctx.fill();
+              // Crop bud
+              ctx.fillStyle = type.color;
+              ctx.shadowBlur = 4;
+              ctx.shadowColor = type.color;
+              ctx.beginPath(); ctx.arc(cx, cy - 7, 3, 0, Math.PI * 2); ctx.fill();
+              ctx.shadowBlur = 0;
+
+            } else if (stage >= 4 || isReady) {
+              // Stage 4: Harvest-ready — full crop-specific rendering with glow
+              ctx.shadowBlur = 10;
+              ctx.shadowColor = type.bloomColor;
+
+              if (plot.seedIndex === 0) {
+                // Star-Parsnip: Glowing root
+                ctx.fillStyle = '#fffbe6';
+                const rw = 5, rh = 10;
+                ctx.beginPath();
+                ctx.moveTo(cx - rw, cy - rh * 0.2);
+                ctx.lineTo(cx + rw, cy - rh * 0.2);
+                ctx.lineTo(cx + rw * 0.3, cy + rh * 0.8);
+                ctx.lineTo(cx - rw * 0.3, cy + rh * 0.8);
+                ctx.closePath(); ctx.fill();
                 ctx.fillStyle = '#4caf50';
-                ctx.beginPath();
-                ctx.ellipse(cx - 3, cy - rootH * 0.3 - 2, 3, 5, -0.3, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.beginPath();
-                ctx.ellipse(cx + 3, cy - rootH * 0.3 - 2, 3, 5, 0.3, 0, Math.PI * 2);
-                ctx.fill();
-              }
-            } else if (plot.seedIndex === 1) {
-              // Glass-Pods: Transparent beans with sap inside
-              ctx.shadowBlur = isReady ? 10 : 0;
-              ctx.shadowColor = '#b8f0d8';
-              const podW = Math.max(3, s * 0.5);
-              const podH = Math.max(4, s * 1.2);
-              // Pod shell (semi-transparent green)
-              ctx.fillStyle = isReady ? 'rgba(126, 200, 168, 0.7)' : 'rgba(126, 200, 168, 0.4)';
-              ctx.beginPath();
-              ctx.ellipse(cx - 3, cy, podW, podH, -0.2, 0, Math.PI * 2);
-              ctx.fill();
-              ctx.beginPath();
-              ctx.ellipse(cx + 3, cy, podW, podH, 0.2, 0, Math.PI * 2);
-              ctx.fill();
-              // Inner sap dots
-              if (plot.growth > 0.4) {
+                ctx.beginPath(); ctx.ellipse(cx - 3, cy - rh * 0.2 - 2, 3, 5, -0.3, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.ellipse(cx + 3, cy - rh * 0.2 - 2, 3, 5, 0.3, 0, Math.PI * 2); ctx.fill();
+
+              } else if (plot.seedIndex === 1) {
+                // Glass-Pods: Transparent beans
+                ctx.fillStyle = 'rgba(126, 200, 168, 0.7)';
+                ctx.beginPath(); ctx.ellipse(cx - 3, cy, 4, 8, -0.2, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.ellipse(cx + 3, cy, 4, 8, 0.2, 0, Math.PI * 2); ctx.fill();
                 ctx.fillStyle = 'rgba(200, 255, 230, 0.8)';
                 ctx.beginPath(); ctx.arc(cx - 3, cy - 2, 2, 0, Math.PI * 2); ctx.fill();
                 ctx.beginPath(); ctx.arc(cx + 3, cy + 1, 2, 0, Math.PI * 2); ctx.fill();
-              }
-            } else if (plot.seedIndex === 2) {
-              // Cratertatoes: Lumpy gray moon-rock tubers
-              ctx.fillStyle = isReady ? '#b0b0b0' : '#8a8a8a';
-              ctx.shadowBlur = isReady ? 6 : 0;
-              ctx.shadowColor = '#d0d0d0';
-              const r1 = Math.max(3, s * 0.6);
-              const r2 = Math.max(2, s * 0.4);
-              // Main lump
-              ctx.beginPath(); ctx.arc(cx, cy, r1, 0, Math.PI * 2); ctx.fill();
-              // Smaller lumps around it
-              if (plot.growth > 0.3) {
-                ctx.beginPath(); ctx.arc(cx - r1 * 0.7, cy + r1 * 0.5, r2, 0, Math.PI * 2); ctx.fill();
-                ctx.beginPath(); ctx.arc(cx + r1 * 0.6, cy - r1 * 0.3, r2 * 0.8, 0, Math.PI * 2); ctx.fill();
-              }
-              // Crater dimples
-              if (isReady) {
+
+              } else if (plot.seedIndex === 2) {
+                // Cratertatoes: Moon-rock lumps
+                ctx.fillStyle = '#b0b0b0';
+                ctx.beginPath(); ctx.arc(cx, cy, 5, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(cx - 4, cy + 3, 3, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(cx + 4, cy - 2, 2.5, 0, Math.PI * 2); ctx.fill();
                 ctx.fillStyle = 'rgba(60, 60, 60, 0.3)';
-                ctx.beginPath(); ctx.arc(cx - 2, cy - 1, 2, 0, Math.PI * 2); ctx.fill();
-                ctx.beginPath(); ctx.arc(cx + 3, cy + 2, 1.5, 0, Math.PI * 2); ctx.fill();
-              }
-            } else if (plot.seedIndex === 3) {
-              // Nova-Berries: Blue berries that pulse light
-              const pulse = Math.sin(Date.now() / 500) * 0.3 + 0.7;
-              ctx.fillStyle = isReady ? `rgba(110, 158, 239, ${pulse})` : '#4a6fa5';
-              ctx.shadowBlur = isReady ? 15 * pulse : 0;
-              ctx.shadowColor = '#6e9eef';
-              const berryR = Math.max(2, s * 0.35);
-              // Cluster of berries
-              ctx.beginPath(); ctx.arc(cx, cy - berryR * 0.5, berryR, 0, Math.PI * 2); ctx.fill();
-              ctx.beginPath(); ctx.arc(cx - berryR, cy + berryR * 0.5, berryR, 0, Math.PI * 2); ctx.fill();
-              ctx.beginPath(); ctx.arc(cx + berryR, cy + berryR * 0.5, berryR, 0, Math.PI * 2); ctx.fill();
-              // Highlight shimmer
-              if (isReady) {
+                ctx.beginPath(); ctx.arc(cx - 1, cy - 1, 1.5, 0, Math.PI * 2); ctx.fill();
+
+              } else if (plot.seedIndex === 3) {
+                // Nova-Berries: Pulsing blue berries
+                const pulse = Math.sin(Date.now() / 500) * 0.3 + 0.7;
+                ctx.fillStyle = `rgba(110, 158, 239, ${pulse})`;
+                ctx.shadowBlur = 15 * pulse;
+                const br = 3.5;
+                ctx.beginPath(); ctx.arc(cx, cy - br * 0.5, br, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(cx - br, cy + br * 0.5, br, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(cx + br, cy + br * 0.5, br, 0, Math.PI * 2); ctx.fill();
                 ctx.fillStyle = `rgba(255, 255, 255, ${pulse * 0.4})`;
-                ctx.beginPath(); ctx.arc(cx - 1, cy - berryR * 0.5 - 1, 1.5, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(cx - 1, cy - br * 0.5 - 1, 1.5, 0, Math.PI * 2); ctx.fill();
               }
+
+              ctx.shadowBlur = 0;
             }
             ctx.shadowBlur = 0; // reset
           }
