@@ -188,6 +188,8 @@ seedPacketImages[0].src = './star-parsnip_seeds.png';
 seedPacketImages[1].src = './Glass_pods_seeds.png';
 seedPacketImages[2].src = './cratertatos_seeds.png';
 seedPacketImages[3].src = './nova_berries_seeds.png';
+// Re-render hotbar once seed images load so they appear instead of fallback dots
+seedPacketImages.forEach(img => { img.onload = () => { if (typeof updateUI === 'function') updateUI(); }; });
 
 // Constants
 const TILE_SIZE = 32; // Made smaller for a more cozy, "miniature" feel
@@ -239,6 +241,113 @@ function selectSlot(index) {
 
 // Game state
 let currentMap = 'farm'; // 'farm' or 'town'
+
+// Season / Calendar System
+const SEASONS = [
+  { name: 'Solar Flare', icon: '☀️', color: '#ff9800', glowColor: 'rgba(255, 152, 0, 0.4)' },
+  { name: 'Binary Heat', icon: '🔥', color: '#f44336', glowColor: 'rgba(244, 67, 54, 0.4)' },
+  { name: 'Gravity Sink', icon: '�', color: '#9c27b0', glowColor: 'rgba(156, 39, 176, 0.4)' },
+  { name: 'Void Cycle', icon: '🌑', color: '#29b6f6', glowColor: 'rgba(41, 182, 246, 0.4)' },
+];
+const DAYS_PER_SEASON = 28;
+const DAY_LENGTH_SECONDS = 90; // ~90 seconds real time = 1 game day
+const HOURS_PER_DAY = 20; // Game runs from 6:00 AM to 2:00 AM (20 hours)
+const START_HOUR = 6; // Day starts at 6 AM
+
+// Global calendar state — accessible by crop scripts via window.currentDay etc.
+let currentDay = 1;
+let currentSeason = 0;
+let currentYear = 1;
+let currentHour = START_HOUR;
+let currentMinute = 0;
+let dayTimer = 0;
+
+// Expose globally for other scripts
+window.currentDay = currentDay;
+window.currentSeason = currentSeason;
+window.currentYear = currentYear;
+window.currentHour = currentHour;
+window.currentMinute = currentMinute;
+window.SEASONS = SEASONS;
+
+function syncGlobals() {
+  window.currentDay = currentDay;
+  window.currentSeason = currentSeason;
+  window.currentYear = currentYear;
+  window.currentHour = currentHour;
+  window.currentMinute = currentMinute;
+}
+
+function advanceDay() {
+  currentDay++;
+  if (currentDay > DAYS_PER_SEASON) {
+    currentDay = 1;
+    currentSeason++;
+    if (currentSeason >= SEASONS.length) {
+      currentSeason = 0;
+      currentYear++;
+    }
+  }
+  currentHour = START_HOUR;
+  currentMinute = 0;
+  syncGlobals();
+  updateCalendarUI();
+}
+
+function updateGameTime(dt) {
+  dayTimer += dt;
+
+  // Calculate how many game-seconds per real-second
+  const gameSecondsPerRealSecond = (HOURS_PER_DAY * 60) / DAY_LENGTH_SECONDS;
+  const gameMinutesElapsed = dt * gameSecondsPerRealSecond;
+
+  currentMinute += gameMinutesElapsed;
+  while (currentMinute >= 60) {
+    currentMinute -= 60;
+    currentHour++;
+  }
+
+  // Check if the day is over
+  if (dayTimer >= DAY_LENGTH_SECONDS) {
+    dayTimer -= DAY_LENGTH_SECONDS;
+    advanceDay();
+  }
+
+  syncGlobals();
+}
+
+function formatGameTime(hour, minute) {
+  const h = Math.floor(hour);
+  const m = Math.floor(minute);
+  const period = h >= 12 && h < 24 ? 'PM' : 'AM';
+  const displayH = h > 12 ? h - 12 : (h === 0 ? 12 : h);
+  return `${displayH}:${m.toString().padStart(2, '0')} ${period}`;
+}
+
+function updateCalendarUI() {
+  const season = SEASONS[currentSeason];
+  const iconEl = document.getElementById('season-icon');
+  const nameEl = document.getElementById('season-name');
+  const dayEl = document.getElementById('day-display');
+  const timeEl = document.getElementById('time-display');
+  const yearEl = document.getElementById('year-display');
+  const hudEl = document.getElementById('calendar-hud');
+
+  if (!iconEl) return;
+
+  iconEl.textContent = season.icon;
+  nameEl.textContent = season.name;
+  nameEl.style.color = season.color;
+  nameEl.style.textShadow = `0 0 8px ${season.glowColor}`;
+  dayEl.textContent = `Day ${currentDay}`;
+  timeEl.textContent = formatGameTime(currentHour, currentMinute);
+  yearEl.textContent = `Year ${currentYear}`;
+  hudEl.style.borderColor = `${season.color}33`;
+  hudEl.style.boxShadow = `0 4px 20px rgba(0,0,0,0.5), 0 0 15px ${season.glowColor}`;
+}
+
+// Initialize calendar on load
+document.addEventListener('DOMContentLoaded', updateCalendarUI);
 
 const player = {
   x: ROCK_WIDTH / 2,
@@ -560,6 +669,13 @@ let lastTime = 0;
 let spaceJustPressed = false;
 
 function update(dt) {
+  // Advance game clock (hours, minutes, day transitions)
+  updateGameTime(dt);
+  // Refresh HUD clock display ~4x per second (every 15 frames)
+  if (Math.floor(dayTimer * 4) !== Math.floor((dayTimer - dt) * 4)) {
+    updateCalendarUI();
+  }
+
   // Move stars slowly to simulate space floating
   stars.forEach(s => {
     s.y += s.speedY * dt * 60;

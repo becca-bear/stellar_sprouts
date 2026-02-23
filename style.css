@@ -440,3 +440,78 @@ html {
   font-weight: 800;
   text-shadow: 0 0 8px rgba(240, 195, 71, 0.4);
 }
+
+/* ===== CALENDAR HUD ===== */
+#calendar-hud {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(13, 17, 23, 0.8);
+  padding: 12px 18px;
+  border-radius: 14px;
+  border: 1px solid rgba(88, 166, 255, 0.2);
+  backdrop-filter: blur(10px);
+  user-select: none;
+  pointer-events: none;
+  transition: border-color 0.5s ease, box-shadow 0.5s ease;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+#season-icon {
+  font-size: 28px;
+  line-height: 1;
+  filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.3));
+  animation: seasonPulse 3s ease-in-out infinite;
+}
+
+@keyframes seasonPulse {
+
+  0%,
+  100% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.1);
+  }
+}
+
+#calendar-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+#season-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: #4caf50;
+  text-shadow: 0 0 8px rgba(76, 175, 80, 0.4);
+  letter-spacing: 0.5px;
+  transition: color 0.5s ease, text-shadow 0.5s ease;
+}
+
+#day-display {
+  font-size: 18px;
+  font-weight: 800;
+  color: #e6edf3;
+  letter-spacing: 1px;
+}
+
+#time-display {
+  font-size: 12px;
+  font-weight: 600;
+  color: #a5d6ff;
+  letter-spacing: 0.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+#year-display {
+  font-size: 11px;
+  color: #8b949e;
+  font-weight: 600;
+}
