@@ -191,6 +191,11 @@ seedPacketImages[3].src = './nova_berries_seeds.png';
 // Re-render hotbar once seed images load so they appear instead of fallback dots
 seedPacketImages.forEach(img => { img.onload = () => { if (typeof updateUI === 'function') updateUI(); }; });
 
+// Load tool images
+const laserHoeImage = new Image();
+laserHoeImage.src = './laser_hoe.png';
+laserHoeImage.onload = () => { if (typeof updateUI === 'function') updateUI(); };
+
 // Constants
 const TILE_SIZE = 32; // Made smaller for a more cozy, "miniature" feel
 const MAP_COLS = 16;
@@ -400,11 +405,11 @@ const player = {
 
 const inventory = {
   slots: [
+    { type: 'tool', id: 'laser_hoe' },
     { type: 'seed', id: 0, count: 5 },
     { type: 'seed', id: 1, count: 5 },
     { type: 'seed', id: 2, count: 5 },
     { type: 'seed', id: 3, count: 5 },
-    { type: 'empty' },
     { type: 'empty' },
     { type: 'empty' },
     { type: 'empty' },
@@ -424,6 +429,11 @@ const SHOP_SEEDS = [
 ];
 
 const CROP_SELL_PRICES = [25, 35, 30, 45]; // Sell price per crop type (index = seed id)
+
+// Shop tools
+const SHOP_TOOLS = [
+  { id: 'laser_hoe', name: 'Laser Hoe', desc: 'Plasma-edged tiller. Cuts through alien soil like butter!', price: 50, icon: '⛏️' },
+];
 
 const SHOPKEEPER_MESSAGES = [
   '✨ Welcome to Orion\'s Outpost! What\'ll it be today?',
@@ -486,6 +496,34 @@ function renderShopBuyTab() {
     `;
     container.appendChild(div);
   });
+
+  // Add tools section
+  if (SHOP_TOOLS.length > 0) {
+    const toolHeader = document.createElement('div');
+    toolHeader.style.cssText = 'padding: 8px 0 4px; color: #8b949e; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; border-top: 1px solid rgba(255,255,255,0.05); margin-top: 8px;';
+    toolHeader.textContent = '🔧 TOOLS';
+    container.appendChild(toolHeader);
+
+    SHOP_TOOLS.forEach(tool => {
+      const canAfford = playerGold >= tool.price;
+      const alreadyOwned = inventory.slots.some(s => s.type === 'tool' && s.id === tool.id);
+      const toolImgHtml = (tool.id === 'laser_hoe' && laserHoeImage.complete)
+        ? `<img src="${laserHoeImage.src}" style="width:48px;height:auto;border-radius:6px;image-rendering:pixelated;" />`
+        : `<div class="item-gem" style="background:#7c8aff; box-shadow:0 0 14px #7c8aff"></div>`;
+      const div = document.createElement('div');
+      div.className = 'shop-item';
+      div.innerHTML = `
+        ${toolImgHtml}
+        <div class="shop-item-info">
+          <p class="item-name">${tool.name}</p>
+          <p class="item-desc">${tool.desc}</p>
+        </div>
+        <span class="item-price">🌙 ${tool.price}</span>
+        <button class="shop-btn buy-btn" ${canAfford && !alreadyOwned ? '' : 'disabled'} onclick="buyTool('${tool.id}')">${alreadyOwned ? 'Owned' : 'Buy'}</button>
+      `;
+      container.appendChild(div);
+    });
+  }
 }
 
 function renderShopSellTab() {
@@ -553,7 +591,30 @@ window.switchTab = switchTab;
 window.buySeed = buySeed;
 window.sellCrop = sellCrop;
 
+function buyTool(toolId) {
+  const tool = SHOP_TOOLS.find(t => t.id === toolId);
+  if (!tool || playerGold < tool.price) return;
+  // Check if already owned
+  if (inventory.slots.some(s => s.type === 'tool' && s.id === toolId)) return;
+  playerGold -= tool.price;
+  addItemToInventory('tool', toolId, tool.name);
+  document.getElementById('player-gold').textContent = playerGold + ' Stardust';
+  renderShopBuyTab();
+  document.getElementById('shopkeeper-msg').textContent = `⚒️ Here's your ${tool.name}! Happy tilling!`;
+}
+window.buyTool = buyTool;
+
 function addItemToInventory(type, id, name) {
+  // Tools don't stack — check if already owned
+  if (type === 'tool') {
+    if (inventory.slots.some(s => s.type === 'tool' && s.id === id)) return;
+    const emptyIndex = inventory.slots.findIndex(s => s.type === 'empty');
+    if (emptyIndex !== -1) {
+      inventory.slots[emptyIndex] = { type: 'tool', id, name };
+    }
+    updateUI();
+    return;
+  }
   // Try to find existing stack
   const existing = inventory.slots.find(s => s.type === type && s.id === id);
   if (existing) {
@@ -882,7 +943,7 @@ function interact() {
     const selectedSlot = inventory.slots[selectedSlotIndex];
 
     if (!plot) {
-      if (currentMap === 'farm') {
+      if (currentMap === 'farm' && selectedSlot.type === 'tool' && selectedSlot.id === 'laser_hoe') {
         farmData[key] = { state: 'hoed' };
       }
     } else if (plot.state === 'hoed' && selectedSlot.type === 'seed' && selectedSlot.count > 0) {
@@ -948,14 +1009,22 @@ function updateUI() {
       } else if (slot.type === 'crop') {
         const seedInfo = SEED_TYPES[slot.id];
         icon.innerHTML = `<div class="icon-crop" style="background: ${seedInfo.bloomColor}; box-shadow: 0 0 10px ${seedInfo.bloomColor}"></div>`;
+      } else if (slot.type === 'tool') {
+        if (slot.id === 'laser_hoe' && laserHoeImage.complete) {
+          icon.innerHTML = `<img src="${laserHoeImage.src}" style="width:36px;height:auto;image-rendering:pixelated;" />`;
+        } else {
+          icon.innerHTML = `<div style="font-size:20px;">⛏️</div>`;
+        }
       }
 
       slotEl.appendChild(icon);
 
-      const count = document.createElement('span');
-      count.className = 'item-count';
-      count.innerText = slot.count;
-      slotEl.appendChild(count);
+      if (slot.count !== undefined) {
+        const count = document.createElement('span');
+        count.className = 'item-count';
+        count.innerText = slot.count;
+        slotEl.appendChild(count);
+      }
     }
 
     hotbarEl.appendChild(slotEl);
