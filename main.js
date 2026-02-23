@@ -196,6 +196,9 @@ const laserHoeImage = new Image();
 laserHoeImage.src = './laser_hoe.png';
 laserHoeImage.onload = () => { if (typeof updateUI === 'function') updateUI(); };
 
+const playerActionsSheet = new Image();
+playerActionsSheet.src = './laser_hoe_spritesheet.png';
+
 // Constants
 const TILE_SIZE = 32; // Made smaller for a more cozy, "miniature" feel
 const MAP_COLS = 16;
@@ -401,6 +404,8 @@ const player = {
   color: '#58a6ff',
   dirX: 0,
   dirY: 1,
+  action: null, // 'hoeing' | 'harvesting'
+  actionTimer: 0,
 };
 
 const inventory = {
@@ -786,30 +791,50 @@ function update(dt) {
     if (p.y > 2000) p.y = -2000;
   });
 
-  // Movement
-  let vx = 0;
-  let vy = 0;
-  if (keys.w) vy -= 1;
-  if (keys.s) vy += 1;
-  if (keys.a) vx -= 1;
-  if (keys.d) vx += 1;
-
-  if (vx !== 0 && vy !== 0) {
-    const len = Math.sqrt(vx * vx + vy * vy);
-    vx /= len;
-    vy /= len;
+  // Handle action animations
+  if (player.actionTimer > 0) {
+    player.actionTimer -= dt;
+    if (player.actionTimer <= 0) {
+      player.actionTimer = 0;
+      player.action = null;
+    }
   }
 
-  // Save facing direction
-  if (vx !== 0) {
-    player.dirX = vx; // Persistent horizontal facing
-  }
-  if (vy !== 0 || vx !== 0) {
-    player.dirY = vy;
-  }
+  // --- Map boundaries constraints ---
+  const mapLeft = (canvas.width - ROCK_WIDTH) / 2;
+  const mapRight = mapLeft + ROCK_WIDTH;
+  const mapTop = (canvas.height - ROCK_HEIGHT) / 2;
+  const mapBottom = mapTop + ROCK_HEIGHT;
 
-  let newX = player.x + vx * player.speed * dt;
-  let newY = player.y + vy * player.speed * dt;
+  // Move player (only if not doing an action animation)
+  let newX = player.x;
+  let newY = player.y;
+
+  if (player.actionTimer <= 0) {
+    let vx = 0;
+    let vy = 0;
+    if (keys.w) vy -= 1;
+    if (keys.s) vy += 1;
+    if (keys.a) vx -= 1;
+    if (keys.d) vx += 1;
+
+    if (vx !== 0 && vy !== 0) {
+      const len = Math.sqrt(vx * vx + vy * vy);
+      vx /= len;
+      vy /= len;
+    }
+
+    // Save facing direction
+    if (vx !== 0) {
+      player.dirX = vx; // Persistent horizontal facing
+    }
+    if (vy !== 0 || vx !== 0) {
+      player.dirY = vy;
+    }
+
+    newX = player.x + vx * player.speed * dt;
+    newY = player.y + vy * player.speed * dt;
+  }
 
   // Map Transitions — check BEFORE clamping so the clamp doesn't fight the teleport
   const transitionPadding = player.size;
@@ -945,6 +970,8 @@ function interact() {
     if (!plot) {
       if (currentMap === 'farm' && selectedSlot.type === 'tool' && selectedSlot.id === 'laser_hoe') {
         farmData[key] = { state: 'hoed' };
+        player.action = 'hoeing';
+        player.actionTimer = 0.4;
       }
     } else if (plot.state === 'hoed' && selectedSlot.type === 'seed' && selectedSlot.count > 0) {
       // Plant a seed
@@ -961,20 +988,28 @@ function interact() {
         isWatered: false,
         withered: false
       };
+      player.action = 'hoeing'; // Planting uses the same animation
+      player.actionTimer = 0.3;
       updateUI();
     } else if (plot.state === 'planted' && !plot.isWatered) {
       // Water a planted crop
       plot.isWatered = true;
+      player.action = 'hoeing'; // Watering uses the same animation
+      player.actionTimer = 0.3;
     } else if (plot.state === 'ready') {
       // Harvest
       const cropId = plot.seedIndex;
       const seedInfo = SEED_TYPES[cropId];
       addItemToInventory('crop', cropId, seedInfo.cropName);
       delete farmData[key];
+      player.action = 'harvesting';
+      player.actionTimer = 0.4;
       updateUI();
     } else if (plot.state === 'withered') {
       // Clear withered crop
       delete farmData[key];
+      player.action = 'hoeing';
+      player.actionTimer = 0.3;
     }
   }
 }
@@ -1331,39 +1366,59 @@ function render() {
   ctx.ellipse(player.x, player.y + 12, 16, 6, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // Draw Player (Custom Sprite)
+  // Draw Player (Custom Sprite or Animation)
   ctx.save();
   ctx.translate(player.x, player.y);
 
-  // Flip sprite based on movement direction (base image faces right)
+  // Flip sprite based on movement direction
   const isFacingLeft = player.dirX < 0;
   if (isFacingLeft) {
     ctx.scale(-1, 1);
-  } else {
-    ctx.scale(1, 1);
   }
 
-  // Enhanced "Antigravity" Floating Animation
-  // Faster, wider bobbing when moving to feel 'floaty'
-  const isMoving = keys.w || keys.a || keys.s || keys.d;
-  const floatSpeed = isMoving ? 120 : 180;
-  const floatAmp = isMoving ? 12 : 6;
-  const floatOffset = Math.sin(Date.now() / floatSpeed) * floatAmp;
+  if (player.action && playerActionsSheet.complete) {
+    // Render animated action from spritesheet (3 cols x 2 rows, ~250x264 each)
+    const frameW = playerActionsSheet.width / 3;
+    const frameH = playerActionsSheet.height / 2;
+    let srcX = 0;
+    let srcY = 0;
 
-  ctx.translate(0, floatOffset);
+    if (player.action === 'hoeing') {
+      srcX = frameW * 1; // Col 1
+      srcY = frameH * 1; // Row 1 (striking down)
+    } else if (player.action === 'harvesting') {
+      srcX = frameW * 2; // Col 2
+      srcY = frameH * 0; // Row 0 (holding parsnip)
+    }
 
-  // Add a slight tilt when moving for extra "floaty" feel
-  if (isMoving) {
-    ctx.rotate(Math.sin(Date.now() / 200) * 0.05);
-  }
+    const scale = 0.28; // Tweak to match standard player size
+    const drawW = frameW * scale;
+    const drawH = frameH * scale;
 
-  if (playerImage && playerImage.complete) {
-    const pSize = 56; // Slightly larger for better detail
-    ctx.drawImage(playerImage, -pSize / 2, -pSize + 10, pSize, pSize);
+    ctx.drawImage(
+      playerActionsSheet,
+      srcX, srcY, frameW, frameH,
+      -drawW / 2 + 10, -drawH + 15, drawW, drawH
+    );
   } else {
-    // Fallback if image not loaded
-    ctx.fillStyle = '#f15bb5';
-    ctx.fillRect(-16, -32, 32, 32);
+    // Normal Floating Idle/Walk Animation
+    const isMoving = keys.w || keys.a || keys.s || keys.d;
+    const floatSpeed = isMoving ? 120 : 180;
+    const floatAmp = isMoving ? 12 : 6;
+    const floatOffset = Math.sin(Date.now() / floatSpeed) * floatAmp;
+
+    ctx.translate(0, floatOffset);
+    if (isMoving) {
+      ctx.rotate(Math.sin(Date.now() / 200) * 0.05);
+    }
+
+    if (playerImage && playerImage.complete) {
+      const pSize = 56;
+      ctx.drawImage(playerImage, -pSize / 2, -pSize + 10, pSize, pSize);
+    } else {
+      ctx.fillStyle = '#f15bb5';
+      ctx.fillRect(-16, -32, 32, 32);
+    }
   }
 
   ctx.restore();
